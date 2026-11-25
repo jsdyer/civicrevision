@@ -24,7 +24,7 @@ jobs:
         with:
           ref: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'main' || github.ref }}
           persist-credentials: ${{ github.event_name != 'pull_request' }}
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - uses: actions/setup-node@v6
