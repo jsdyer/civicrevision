@@ -1,37 +1,9 @@
-import { cleanLines } from './model.mjs';
-const input = document.querySelector('#input');
-const output = document.querySelector('#output');
-const status = document.querySelector('#status');
-const copy = document.querySelector('#copy');
-function update() {
-  const result = cleanLines(input.value);
-  output.value = result.text;
-  status.textContent = `${result.count} unique ${result.count === 1 ? 'line' : 'lines'}; ${result.removed} ${result.removed === 1 ? 'duplicate' : 'duplicates'} removed.`;
-  copy.disabled = result.count === 0;
-}
-input.addEventListener('input', update);
-document.querySelector('#sample').addEventListener('click', () => {
-  input.value = '  Halifax\nLangley\nHalifax\n\nVancouver  ';
-  update();
-});
-document.querySelector('#clear').addEventListener('click', () => {
-  input.value = '';
-  update();
-  input.focus();
-});
-if (navigator.clipboard && window.isSecureContext) {
-  copy.hidden = false;
-  copy.disabled = true;
-  copy.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(output.value);
-      status.textContent = 'Result copied.';
-    } catch {
-      output.focus();
-      output.select();
-      status.textContent = 'Copy was unavailable. The result is selected so you can copy it manually.';
-    }
-  });
-}
-// Namespace future preference storage as coolcode:<tool-id>:<key>.
-// Do not persist pasted text or uploads by default.
+import {filterRecords,safeHttps,ageHours,readableDelta,validSnapshot} from './model.mjs';
+const $=id=>document.getElementById(id);let snapshot,records=[],shown=40,sequence=0;
+const el=(tag,text,cls)=>{const n=document.createElement(tag);n.textContent=text;if(cls)n.className=cls;return n;};
+function link(text,url){const n=el('a',text);const safe=safeHttps(url);if(safe){n.href=safe;n.rel='noreferrer';}return n;}
+function citation(c,verb){const row=el('li','','citation');row.append(el('p',c.text));for(const u of c.urls){const safe=safeHttps(u);if(safe)row.append(link('Open cited source',safe),document.createTextNode(' '));}return row;}
+function render(){const filtered=filterRecords(records,{topic:$('topic').value,query:$('search').value,kind:$('kind').value});$('results').replaceChildren();$('count').textContent=`${filtered.length.toLocaleString()} matching revisions`;for(const r of filtered.slice(0,shown)){const card=el('article','','revision');card.id='rev-'+r.revision_id;card.append(el('p',new Date(r.timestamp).toLocaleString()+' · '+r.language.toUpperCase()+' Wikipedia','meta'),el('h2',r.title),el('p',r.comment));const badges=el('div','');badges.append(el('span',readableDelta(r.bytes_delta),'badge'),el('span',`${r.citations_added.length} citation${r.citations_added.length===1?'':'s'} added · ${r.citations_removed.length} removed`,'badge'));if(r.reversion)badges.append(el('span',r.reversion,'badge'));card.append(badges);const links=el('p','');links.append(link('Original Wikipedia diff',r.source_url),document.createTextNode(' · '),link('This revision',r.revision_url));card.append(links);const details=el('details','');details.append(el('summary','Read changes and citations'));if(!r.comparison_available)details.append(el('p',r.comparison_note));for(const d of r.changes){const block=el('div','','diff');const before=el('div','','removed'),after=el('div','','added');before.append(el('strong','Removed / before'),el('p',d.before||'(none)'));after.append(el('strong','Added / after'),el('p',d.after||'(none)'));block.append(before,after);details.append(block);if(d.truncated)details.append(el('p','Long change shortened; the original Wikipedia diff has the full text.','small'));}if(r.changes_truncated)details.append(el('p','Showing the first 30 changed blocks. See the original diff for all changes.','small'));if(!r.changes.length&&r.comparison_available)details.append(el('p','No textual difference found between these revisions.'));for(const [name,items]of [['Added citations',r.citations_added],['Removed citations',r.citations_removed]])if(items.length){details.append(el('h3',name));const list=el('ul','');for(const c of items)list.append(citation(c,name));details.append(list);}details.append(el('p','Text is simplified from wikitext. Citation edits can appear as one removal and one addition; tags and matching earlier content are signals, not judgments.','small'));card.append(details,el('p','First captured '+new Date(r.first_observed_at).toLocaleString()+' · Wikipedia contributors, CC BY-SA','small'));$('results').append(card);}if(!filtered.length)$('results').append(el('p','No captured revisions match these filters. Try another month or a broader topic.','empty'));$('more').hidden=filtered.length<=shown;const params=new URLSearchParams();if($('topic').value)params.set('topic',$('topic').value);if($('month').value)params.set('month',$('month').value);history.replaceState(null,'',location.pathname+(params.size?'?'+params.toString():''));}
+async function loadMonth(){const token=++sequence;shown=40;const month=$('month').value;$('results').replaceChildren();$('count').textContent='Loading selected capture…';$('more').hidden=true;try{if(!month)records=snapshot.records;else{const entry=snapshot.history.find(x=>x.month===month);if(!entry)throw new Error('Unknown archive month.');const response=await fetch('./data/'+entry.path);if(!response.ok)throw new Error('Archive request failed.');const buf=await response.arrayBuffer();if(crypto.subtle){const digest=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',buf))).map(x=>x.toString(16).padStart(2,'0')).join('');if(digest!==entry.sha256)throw new Error('Archive verification failed.');}const body=JSON.parse(new TextDecoder().decode(buf));if(body.schema!=='civicrevision.history.v1'||body.month!==month||!Array.isArray(body.records))throw new Error('Invalid archive.');if(token!==sequence)return;records=body.records;}render();}catch(e){if(token!==sequence)return;records=[];$('count').textContent=e.message+' Reload or choose Recent captures.';}}
+async function init(){try{const response=await fetch('./data/snapshot.json');if(!response.ok)throw Error('Snapshot unavailable');snapshot=await response.json();if(!validSnapshot(snapshot))throw Error('Invalid snapshot');$('status').textContent=`Source checked ${new Date(snapshot.checked_at).toLocaleString()} · ${snapshot.total_retained.toLocaleString()} retained revisions from ${snapshot.coverage.length} configured articles.`+(ageHours(snapshot.checked_at)>18?' This capture is older than expected; current edits may be missing.':'');$('articles-stat').textContent=snapshot.coverage.length;$('revisions-stat').textContent=snapshot.total_retained;for(const topic of snapshot.topics){$('topic').append(new Option(topic.label,topic.id));const li=el('li','');li.append(link(topic.label,location.origin+location.pathname+'data/feeds/'+topic.id+'.xml'));$('feeds').append(li);}for(const entry of snapshot.history)$('month').append(new Option(entry.month+' · '+entry.count+' revisions',entry.month));for(const c of snapshot.coverage){const li=el('li',`${c.title}: ${c.revisions_returned} revisions returned, ${c.oldest_returned_at.slice(0,10)} to ${c.latest_revision_at.slice(0,10)}${c.window_gap?' — collection gap: new window does not overlap prior observations':''}`);$('coverage').append(li);}const p=new URLSearchParams(location.search);if(snapshot.topics.some(x=>x.id===p.get('topic')))$('topic').value=p.get('topic');if(snapshot.history.some(x=>x.month===p.get('month')))$('month').value=p.get('month');await loadMonth();}catch(e){$('status').textContent='The published capture could not be loaded. Please retry later.';$('count').textContent='No data loaded.';}}
+for(const id of ['topic','kind'])$(id).addEventListener('change',()=>{shown=40;render();});$('search').addEventListener('input',()=>{shown=40;render();});$('month').addEventListener('change',loadMonth);$('more').addEventListener('click',()=>{shown+=40;render();});init();

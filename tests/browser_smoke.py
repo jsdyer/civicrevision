@@ -29,15 +29,22 @@ def main():
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 page.goto(f"http://127.0.0.1:{server.server_port}/example-tool/")
-                page.locator("#sample").click()
-                assert page.locator("#output").input_value() == "Halifax\nLangley\nVancouver"
-                assert "1 duplicate removed" in page.locator("#status").inner_text()
-                page.locator("#input").fill('<img src=x onerror="alert(1)">\n<img src=x onerror="alert(1)">')
-                assert page.locator("#output").input_value() == '<img src=x onerror="alert(1)">'
+                page.locator(".revision").first.wait_for()
+                assert "retained revisions" in page.locator("#status").inner_text()
+                assert page.locator("#feeds a").count() >= 2
+                page.locator("#search").fill("Halifax")
+                assert "Halifax" in page.locator("#results").inner_text()
+                page.locator(".revision summary").first.click()
+                assert page.locator(".revision details").first.get_attribute("open") is not None
+                page.locator("#search").fill("<img src=x onerror=alert(1)>")
+                assert "No captured revisions" in page.locator("#results").inner_text()
                 assert page.locator("img").count() == 0
-                page.locator("#clear").click()
-                assert page.locator("#output").input_value() == ""
-                page.locator("#sample").click()
+                page.locator("#search").fill("")
+                values=page.locator("#month option").evaluate_all("els => els.map(e=>e.value)")
+                if len(values)>1:
+                    page.locator("#month").select_option(values[-1])
+                    page.locator(".revision").first.wait_for()
+                    assert "month=" in page.url
                 page.screenshot(path=str(screenshots / "desktop.png"), full_page=True)
                 page.set_viewport_size({"width": 390, "height": 844})
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

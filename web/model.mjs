@@ -1,7 +1,5 @@
-// Keep transformations separate from the DOM so they can be tested directly.
-export function cleanLines(text) {
-  if (typeof text !== 'string') throw new TypeError('Expected text');
-  const lines = text.split(/\r\n|\r|\n/).map(line => line.trim()).filter(Boolean);
-  const unique = [...new Set(lines)];
-  return { text: unique.join('\n'), count: unique.length, removed: lines.length - unique.length };
-}
+export function filterRecords(records,{topic='',query='',kind='all'}={}){const q=query.trim().toLocaleLowerCase();return records.filter(r=>(!topic||r.topics.includes(topic))&&(!q||[r.title,r.comment,...r.citations_added.map(c=>c.text),...r.citations_removed.map(c=>c.text)].join(' ').toLocaleLowerCase().includes(q))&&(kind!=='citations'||r.citations_added.length+r.citations_removed.length>0)&&(kind!=='reversions'||Boolean(r.reversion)));}
+export function safeHttps(value){try{const u=new URL(value);return u.protocol==='https:'&&!u.username&&!u.password?u.href:null;}catch{return null;}}
+export function ageHours(iso,now=Date.now()){const n=Date.parse(iso);return Number.isFinite(n)?Math.max(0,(now-n)/3600000):Infinity;}
+export function readableDelta(n){return n===null?'Size comparison unavailable':`${n>=0?'+':''}${n.toLocaleString()} bytes`;}
+export function validSnapshot(s){return s?.schema==='civicrevision.v1'&&Array.isArray(s.records)&&Array.isArray(s.topics)&&Array.isArray(s.history)&&Number.isFinite(Date.parse(s.checked_at));}

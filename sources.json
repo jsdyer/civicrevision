@@ -1,0 +1,11 @@
+{
+  "language": "en",
+  "revisions_per_article": 12,
+  "max_response_bytes": 12000000,
+  "topics": [
+    {"id":"institutions","label":"Public institutions","articles":["Parliament of Canada","Supreme Court of Canada","Canadian Radio-television and Telecommunications Commission"]},
+    {"id":"rights-policy","label":"Rights & public policy","articles":["Copyright law of Canada","Privacy Act (Canada)","Access to Information Act"]},
+    {"id":"economy","label":"Economy & public services","articles":["Bank of Canada","Statistics Canada","Canada Post"]},
+    {"id":"regional","label":"BC & Nova Scotia","articles":["Government of British Columbia","Government of Nova Scotia","Halifax Regional Council"]}
+  ]
+}

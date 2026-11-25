@@ -4,24 +4,41 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  schedule:
+    - cron: '37 */6 * * *'
 permissions:
   contents: read
+concurrency:
+  group: civicrevision-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    permissions:
+      contents: write
     outputs:
       publish: ${{ steps.identity.outputs.publish }}
     steps:
       - uses: actions/checkout@v7
         with:
-          persist-credentials: false
+          ref: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'main' || github.ref }}
+          persist-credentials: ${{ github.event_name != 'pull_request' }}
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
+      - name: Signal collection start
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        env:
+          HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
+        run: |
+          if [ -n "$HEALTHCHECKS_URL" ]; then curl -fsS --retry 2 --max-time 15 "$HEALTHCHECKS_URL/start" > /dev/null; fi
+      - name: Collect complete configured Wikipedia revision windows
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        run: python3 scripts/collect.py
       - name: Test the application
         run: node --test tests/*.test.mjs
       - name: Test the builder
@@ -46,6 +63,27 @@ jobs:
           python3 -m playwright install --with-deps chromium
       - name: Check application in a browser
         run: python3 tests/browser_smoke.py
+      - name: Commit validated revision captures and durable history
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        run: |
+          git add web/data
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'data: retain verified Wikipedia revision captures'
+            git push origin HEAD:main
+          fi
+      - name: Signal collection result
+        if: always() && github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        env:
+          HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          if [ -n "$HEALTHCHECKS_URL" ]; then
+            suffix=''
+            if [ "$JOB_STATUS" != 'success' ]; then suffix='/fail'; fi
+            curl -fsS --retry 2 --max-time 15 "$HEALTHCHECKS_URL$suffix" > /dev/null
+          fi
       - name: Save browser screenshots
         if: always()
         uses: actions/upload-artifact@v7
@@ -70,9 +108,6 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    concurrency:
-      group: github-pages
-      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write
