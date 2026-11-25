@@ -16,6 +16,7 @@
   "access": "browser",
   "data_info": {
     "mode": "snapshot",
-    "detail": "Scheduled Wikimedia revision captures with original revision links, citation changes and topic feeds."
+    "detail": "Scheduled Wikimedia revision captures with original revision links, citation changes and topic feeds.",
+    "cadence": "Every six hours"
   }
 }
